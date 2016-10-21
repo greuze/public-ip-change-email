@@ -1,8 +1,10 @@
 'use strict';
 
-require('dotenv').config({silent: true});
-
 var logger = require('logops');
+var path = require('path');
+
+var envFile = process.env.CONFIG_FILE || path.join(__dirname, '.env');
+require('dotenv').config({path: envFile, silent: true});
 
 var config = {
     smtp: {
