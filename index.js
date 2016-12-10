@@ -2,15 +2,16 @@ var nodemailer = require('nodemailer');
 var logger = require('logops');
 var exec = require('child_process').exec;
 var config = require('./config.js');
+var os = require('os');
 
-function sendChangeIpEmail(transporter, ip) {
+function sendChangeIpEmail(transporter, publicIp, privateIps) {
     // Setup e-mail data with unicode symbols
     var mailOptions = {
         from: '"Public IP Change" ' + config.smtp.auth.user, // Sender address
         to: config.to, // List of receivers
-        subject: 'New Public IP is ' + ip, // Subject line
-        text: 'Public IP address has changed to ' + ip, // Plaintext body
-        html: '<b>Public IP address has changed to ' + ip + '</b>' // HTML body
+        subject: 'New Public IP is ' + publicIp, // Subject line
+        text: 'Public: ' + publicIp + ', privates: ' + privateIps, // Plaintext body
+        html: 'Public: <b>' + publicIp + '</b>, privates: ' + privateIps // HTML body
     };
 
     // Send mail with defined transport object
@@ -24,7 +25,18 @@ function sendChangeIpEmail(transporter, ip) {
 
 // create reusable transporter object using the default SMTP transport
 var transporter = nodemailer.createTransport(config.smtp);
-var ip;
+var publicIp;
+
+function getPrivateIps() {
+    var ifaces = os.networkInterfaces();
+    var privateIps = [];
+    for (var ifaceName in ifaces) {
+        privateIps = privateIps.concat(ifaces[ifaceName].filter(function(iface) {
+            return iface.family === 'IPv4' && iface.internal === false;
+        }));
+    }
+    return privateIps.map(function(iface) { return iface.address; }).join(',');
+}
 
 function main() {
     exec('dig +short myip.opendns.com @resolver1.opendns.com', function (err, stdout, stderr) {
@@ -33,11 +45,12 @@ function main() {
             sendChangeIpEmail(transporter, 'ERROR');
         } else {
             // Remove new line
-            var newIp = stdout.replace(/\n/g, '');
-            if (newIp !== ip) {
-                logger.info('New public Ip', newIp);
-                ip = newIp;
-                sendChangeIpEmail(transporter, ip);
+            var newPublicIp = stdout.replace(/\n/g, '');
+            if (newPublicIp !== publicIp) {
+                publicIp = newPublicIp;
+                var privateIps = getPrivateIps();
+                logger.info('New public IP %s with private IPs %s', newPublicIp, privateIps);
+                sendChangeIpEmail(transporter, publicIp, privateIps);
             } else {
                 logger.debug('Ip remains');
             }
